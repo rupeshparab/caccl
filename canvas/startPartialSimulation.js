@@ -1,4 +1,6 @@
 const initPartialSimulation = require('caccl-canvas-partial-simulator');
+const inquirer = require('inquirer');
+const clear = require('clear');
 const path = require('path');
 
 /* eslint-disable no-console */
@@ -40,7 +42,14 @@ if (
   !devEnvironment
   || !devEnvironment.courseId
   || !devEnvironment.canvasHost
-  || !devEnvironment.accessToken
+  || (
+    !devEnvironment.accessToken
+    && !devEnvironment.accessTokens
+  )
+  || (
+    devEnvironment.accessToken
+    && devEnvironment.accessTokens
+  )
 ) {
   // Invalid environment
   console.log('\nYour dev environment needs to be set up.');
@@ -50,6 +59,12 @@ if (
   console.log('  courseId: 43819,                 // Sandbox course id');
   console.log('  canvasHost: \'canvas.school.edu\', // Canvas instance host');
   console.log('  accessToken: \'1949~fdjis...\',    // Canvas access token');
+  console.log('  or (not both)');
+  console.log('  accessTokens: { // Set of access tokens');
+  console.log('    teacher: \'1949~fdjis...\',');
+  console.log('    student: \'1949~58225...\',');
+  console.log('    ^name     ^token');
+  console.log('  },');
   console.log('};\n');
   process.exit(0);
 }
@@ -59,40 +74,74 @@ const {
   courseId,
   canvasHost,
   accessToken,
+  accessTokens,
   launchURL,
 } = devEnvironment;
 
 console.log('Starting a partially-simulated Canvas instance:');
 console.log(`- Test course id: ${courseId}`);
 console.log(`- Actual Canvas host: ${canvasHost} (api traffic forwarded here)`);
-console.log(`- Access token: ${accessToken.substring(0, 10)}...`);
 if (launchURL) {
   console.log(`- App launch URL: ${launchURL}`);
 } else {
   console.log('- App launch URL: https://localhost/launch');
 }
 
+// Keep track of current chosen access token
+let chosenTokenKey;
+if (accessTokens) {
+  chosenTokenKey = Object.keys(accessToken)[0];
+}
+
 // Create a simulated Canvas environment
-initPartialSimulation({
-  courseId,
-  canvasHost,
-  accessToken,
-  launchURL,
-  onSuccess: (port) => {
-    // Simulation started
-    console.log('\n\n');
-    // Print top line
-    console.log('\u2554' + '\u2550'.repeat(W - 2) + '\u2557');
+const startSim = (currentAccessToken) => {
+  const { server } = initPartialSimulation({
+    courseId,
+    canvasHost,
+    accessToken,
+    launchURL,
+    onSuccess: async (port) => {
+      // Simulation started
+      console.log('\n\n');
+      // Print top line
+      console.log('\u2554' + '\u2550'.repeat(W - 2) + '\u2557');
 
-    // Print middle lines
-    printMiddleLine('Partially-simulated Canvas environment running!');
-    printMiddleLine('To launch your app, visit:');
-    printMiddleLine(`https://localhost:${port}/courses/${courseId}`);
+      // Print middle lines
+      printMiddleLine('Partially-simulated Canvas environment running!');
+      printMiddleLine('To launch your app, visit:');
+      printMiddleLine(`https://localhost:${port}/courses/${courseId}`);
 
-    // Print bottom line
-    console.log('\u255A' + '\u2550'.repeat(W - 2) + '\u255D');
+      // Print bottom line
+      console.log('\u255A' + '\u2550'.repeat(W - 2) + '\u255D');
 
-    console.log('\nTo launch from other courses, visit:');
-    console.log(`https://localhost:${port}/courses/<courseid>`);
-  },
-});
+      // Show a chooser if there are multiple token choices
+      if (
+        accessTokens
+        && typeof accessTokens === 'object'
+        && Object.keys(accessTokens).length > 0
+      ) {
+        // Print the current token
+        console.log(`\nCurrently logged in as ${chosenTokenKey}'s`);
+        const { tokenKey } = await inquirer.prompt([{
+          type: 'list',
+          name: 'tokenKey',
+          message: 'Change who is logged in:',
+          choices: Object.keys(accessTokens),
+          default: chosenTokenKey,
+        }]);
+
+        // Restart the simulator
+        clear();
+        server.close();
+        startSim(accessTokens[tokenKey]);
+      }
+    },
+  });
+};
+
+// Start the initial simulation
+if (accessToken) {
+  startSim(accessToken);
+} else {
+
+}
