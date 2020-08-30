@@ -49,9 +49,12 @@ module.exports = (oldConfig = {}) => {
       : devServerHost
   );
 
+  const basePath = config.basePath;
+
   // Initialize the API
   const api = new API({
     canvasHost,
+    basePath,
     cacheType: (
       config.cacheType === undefined
         ? 'memory'
